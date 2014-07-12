@@ -1,0 +1,19 @@
+{
+    "name": "athari/yalinqo-perf",
+    "description": "Benchmarks for YaLinqo",
+    "license": "WTFPL",
+    "homepage": "https://github.com/Athari/YaLinqoPerf",
+    "authors": [
+        {
+            "name": "Alexander Prokhorov"
+        }
+    ],
+    "require": {
+        "php": ">=5.5",
+        "athari/yalinqo": "~2.0",
+        "ginq/ginq": "~0.2"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "~3.7"
+    }
+}
