@@ -1,0 +1,1 @@
+cls && php benchmark.php %*
