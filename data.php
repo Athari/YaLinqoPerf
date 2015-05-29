@@ -72,13 +72,13 @@ class SampleData
 
     private function generateOrderItems ($n)
     {
-        $orders = [ ];
+        $items = [ ];
         for ($i = 1; $i <= $n; $i++) {
-            $orders[] = [
+            $items[] = [
                 'prodId' => array_rand($this->products)['id'],
                 'quantity' => rand(0, 10),
             ];
         }
-        return $orders;
+        return $items;
     }
 }

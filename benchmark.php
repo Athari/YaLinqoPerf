@@ -14,13 +14,19 @@ function is_cli ()
     return php_sapi_name() == 'cli' && isset($_SERVER['PROMPT']);
 }
 
-function benchmark_operation ($count, $operation)
+function benchmark_operation ($count, $consume, $operation)
 {
     $time = microtime(true);
     $message = "Success";
+    $return = null;
     try {
-        for ($i = 0; $i < $count; $i++)
-            $operation();
+        for ($i = 0; $i < $count; $i++) {
+            $return = $operation();
+            if ($consume !== null)
+                $consume($return);
+        }
+        if (!is_scalar($return))
+            $return = E::from($return)->toListDeep();
         $result = true;
     }
     catch (Exception $e) {
@@ -29,21 +35,48 @@ function benchmark_operation ($count, $operation)
     }
     return [
         'result' => $result,
+        'return' => $return,
         'message' => $message,
         'time' => (microtime(true) - $time) / $count,
     ];
 }
 
-function benchmark_array ($name, $count, $benches)
+function benchmark_array ($name, $count, $consume, $benches)
 {
     $benches = E::from($benches)->select('[ "name" => $k, "op" => $v ]')->toArray();
+
+    // Run benchmarks
     echo "\n$name ";
     foreach ($benches as $k => $bench) {
-        $benches[$k] = array_merge($bench, benchmark_operation($count, $bench['op']));
+        $benches[$k] = array_merge($bench, benchmark_operation($count, $consume, $bench['op']));
         echo ".";
     }
-    if (is_cli()) // remove progress dots with backspaces
+    // Remove progress dots with backspaces
+    if (is_cli())
         echo str_repeat(chr(8), count($benches) + 1) . str_repeat(' ', count($benches) + 1);
+
+    // Validate results
+    $results = E::from($benches)->select(function ($b) {
+        return [
+            "name" => $b["name"],
+            "return" => $b["result"] ? json_encode($b["return"], JSON_PRETTY_PRINT) : null
+        ];
+    })->toList();
+    $return = $results[0]['return'];
+    for ($i = 1; $i < count($results); $i++) {
+        if ($results[$i]['return'] === null)
+            continue;
+        $returnOther = $results[$i]['return'];
+        if ($return !== $returnOther) {
+            echo "\nERROR: Results from tests '{$results[0]['name']}' and '{$results[$i]['name']}' do not match.\n";
+            echo "0: {$return}\n{$i}: {$returnOther}\n";
+            file_put_contents('tmp/result-0.txt', $return);
+            file_put_contents('tmp/result-1.txt', $returnOther);
+            die;
+        }
+    }
+
+    // Draw table
     echo "\n" . str_repeat("-", strlen($name)) . "\n";
     $min = E::from($benches)->where('$v["result"]')->min('$v["time"]');
     if ($min == 0)
@@ -60,7 +93,7 @@ function benchmark_array ($name, $count, $benches)
             . "\n";
 }
 
-function benchmark_linq_groups ($name, $count, $opsPhp, $opsYaLinqo, $opsGinq, $opsPinq)
+function benchmark_linq_groups ($name, $count, $consume, $opsPhp, $opsYaLinqo, $opsGinq, $opsPinq)
 {
     $benches = E::from([
         "PHP    " => $opsPhp,
@@ -72,7 +105,7 @@ function benchmark_linq_groups ($name, $count, $opsPhp, $opsYaLinqo, $opsGinq, $
         '$op ==> $op',
         '($op, $name, $detail) ==> is_numeric($detail) ? $name : "$name [$detail]"'
     );
-    benchmark_array($name, $count, $benches);
+    benchmark_array($name, $count, $consume, $benches);
 }
 
 function not_implemented ()
@@ -93,7 +126,7 @@ function consume ($array, $props = null)
 $ITER_MAX = isset($_SERVER['argv'][1]) ? (int)$_SERVER['argv'][1] : 100;
 $DATA = new SampleData($ITER_MAX);
 
-benchmark_linq_groups("Iterate over $ITER_MAX ints", 100,
+benchmark_linq_groups("Iterate over $ITER_MAX ints", 100, null,
     [
         "for" => function () use ($ITER_MAX) {
             $j = null;
@@ -133,7 +166,7 @@ benchmark_linq_groups("Iterate over $ITER_MAX ints", 100,
         },
     ]);
 
-benchmark_linq_groups("Generate array of $ITER_MAX integers", 100,
+benchmark_linq_groups("Generate array of $ITER_MAX integers", 100, 'consume',
     [
         "for" =>
             function () use ($ITER_MAX) {
@@ -163,7 +196,7 @@ benchmark_linq_groups("Generate array of $ITER_MAX integers", 100,
         },
     ]);
 
-benchmark_linq_groups("Generate lookup of $ITER_MAX floats, calculate sum", 100,
+benchmark_linq_groups("Generate lookup of $ITER_MAX floats, calculate sum", 100, null,
     [
         function () use ($ITER_MAX) {
             $dic = [ ];
@@ -202,7 +235,7 @@ benchmark_linq_groups("Generate lookup of $ITER_MAX floats, calculate sum", 100,
         },
     ]);
 
-benchmark_linq_groups("Counting values in arrays", 100,
+benchmark_linq_groups("Counting values in arrays", 100, null,
     [
         "for" => function () use ($DATA) {
             $numberOrders = 0;
@@ -245,7 +278,7 @@ benchmark_linq_groups("Counting values in arrays", 100,
         },
     ]);
 
-benchmark_linq_groups("Counting values in arrays deep", 100,
+benchmark_linq_groups("Counting values in arrays deep", 100, null,
     [
         "for" => function () use ($DATA) {
             $numberOrders = 0;
@@ -305,7 +338,7 @@ benchmark_linq_groups("Counting values in arrays deep", 100,
         },
     ]);
 
-benchmark_linq_groups("Filtering values in arrays", 100,
+benchmark_linq_groups("Filtering values in arrays", 100, 'consume',
     [
         "for" => function () use ($DATA) {
             $filteredOrders = [ ];
@@ -313,49 +346,39 @@ benchmark_linq_groups("Filtering values in arrays", 100,
                 if (count($order['items']) > 5)
                     $filteredOrders[] = $order;
             }
-            consume($filteredOrders);
+            return $filteredOrders;
         },
         "arrays functions" => function () use ($DATA) {
-            consume(
-                array_filter(
-                    $DATA->orders,
-                    function ($order) { return count($order['items']) > 5; }
-                )
+            return array_filter(
+                $DATA->orders,
+                function ($order) { return count($order['items']) > 5; }
             );
         },
     ],
     [
         function () use ($DATA) {
-            consume(
-                E::from($DATA->orders)
-                    ->where(function ($order) { return count($order['items']) > 5; })
-            );
+            return E::from($DATA->orders)
+                ->where(function ($order) { return count($order['items']) > 5; });
         },
         "string lambda" => function () use ($DATA) {
-            consume(
-                E::from($DATA->orders)
-                    ->where('$order ==> count($order["items"]) > 5')
-            );
+            return E::from($DATA->orders)
+                ->where('$order ==> count($order["items"]) > 5');
         },
     ],
     [
         function () use ($DATA) {
-            consume(
-                G::from($DATA->orders)
-                    ->where(function ($order) { return count($order['items']) > 5; })
-            );
+            return G::from($DATA->orders)
+                ->where(function ($order) { return count($order['items']) > 5; });
         },
     ],
     [
         function () use ($DATA) {
-            consume(
-                P::from($DATA->orders)
-                    ->where(function ($order) { return count($order['items']) > 5; })
-            );
+            return P::from($DATA->orders)
+                ->where(function ($order) { return count($order['items']) > 5; });
         },
     ]);
 
-benchmark_linq_groups("Filtering property values in arrays", 100,
+/*benchmark_linq_groups("Filtering property values in arrays", 100, 'consume',
     [
         "for" => function () use ($DATA) {
             $filteredItems = [ ];
@@ -364,64 +387,48 @@ benchmark_linq_groups("Filtering property values in arrays", 100,
                 if ($firstItem['quantity'] > 0)
                     $filteredItems[] = $firstItem;
             }
-            consume($filteredItems);
+            return $filteredItems;
         },
         "arrays functions" => function () use ($DATA) {
-            consume(
-                array_map(
-                    function ($order) { return $order['items'][0]; },
-                    array_filter(
-                        $DATA->orders,
-                        function ($order) { return $order['items'][0]['quantity'] > 0; }
-                    )
+            return array_map(
+                function ($order) { return $order['items'][0]; },
+                array_filter(
+                    $DATA->orders,
+                    function ($order) { return $order['items'][0]['quantity'] > 0; }
                 )
             );
         },
     ],
     [
         function () use ($DATA) {
-            consume(
-                E::from($DATA->orders)
-                    ->select(function ($order) { return $order['items'][0]; })
-                    ->where(function ($firstItem) { return $firstItem['quantity'] > 0; })
-            );
+            return E::from($DATA->orders)
+                ->select(function ($order) { return $order['items'][0]; })
+                ->where(function ($firstItem) { return $firstItem['quantity'] > 0; });
         },
         "string lambda" => function () use ($DATA) {
-            consume(
-                E::from($DATA->orders)->select('$v["items"][0]')->where('$v["quantity"] > 0')
-            );
+            return E::from($DATA->orders)->select('$v["items"][0]')->where('$v["quantity"] > 0');
         },
     ],
     [
         function () use ($DATA) {
-            consume(
-                G::from($DATA->orders)
-                    ->select(function ($order) { return $order['items'][0]; })
-                    ->where(function ($firstItem) { return $firstItem['quantity'] > 0; })
-            );
+            return G::from($DATA->orders)
+                ->select(function ($order) { return $order['items'][0]; })
+                ->where(function ($firstItem) { return $firstItem['quantity'] > 0; });
         },
         "property path" => function () use ($DATA) {
-            consume(
-                G::from($DATA->orders)->select('[items][0]')->where('[quantity]')
-            );
+            return G::from($DATA->orders)->select('[items][0]')->where('[quantity]');
         },
     ],
     [
         function () use ($DATA) {
-            consume(
-                P::from($DATA->orders)
-                    ->select(function ($order) { return $order['items'][0]; })
-                    ->where(function ($firstItem) { return $firstItem['quantity'] > 0; })
-            );
+            return P::from($DATA->orders)
+                ->select(function ($order) { return $order['items'][0]; })
+                ->where(function ($firstItem) { return $firstItem['quantity'] > 0; });
         },
-    ]);
-
-function consume_filtering_arrays ($e)
-{
-    consume($e, [ 'items' => null ]);
-}
+    ]);*/
 
 benchmark_linq_groups("Filtering values in arrays deep", 100,
+    function ($e) { consume($e, [ 'items' => null ]); },
     [
         "for" => function () use ($DATA) {
             $filteredOrders = [ ];
@@ -439,98 +446,88 @@ benchmark_linq_groups("Filtering values in arrays deep", 100,
                     ];
                 }
             }
-            consume_filtering_arrays($filteredOrders);
+            return $filteredOrders;
         },
         "arrays functions" => function () use ($DATA) {
-            consume_filtering_arrays(
-                array_filter(
-                    array_map(
-                        function ($order) {
-                            return [
-                                'id' => $order['id'],
-                                'items' => array_filter(
-                                    $order['items'],
-                                    function ($item) { return $item['quantity'] > 5; }
-                                )
-                            ];
-                        },
-                        $DATA->orders
-                    ),
+            return array_filter(
+                array_map(
                     function ($order) {
-                        return count($order['items']) > 0;
-                    }
-                )
+                        return [
+                            'id' => $order['id'],
+                            'items' => array_filter(
+                                $order['items'],
+                                function ($item) { return $item['quantity'] > 5; }
+                            )
+                        ];
+                    },
+                    $DATA->orders
+                ),
+                function ($order) {
+                    return count($order['items']) > 0;
+                }
             );
         },
     ],
     [
         function () use ($DATA) {
-            consume_filtering_arrays(
-                E::from($DATA->orders)
-                    ->select(function ($order) {
-                        return [
-                            'id' => $order['id'],
-                            'items' => E::from($order['items'])
-                                ->where(function ($item) { return $item['quantity'] > 5; })
-                                ->toArray()
-                        ];
-                    })
-                    ->where(function ($order) {
-                        return count($order['items']) > 0;
-                    })
-            );
+            return E::from($DATA->orders)
+                ->select(function ($order) {
+                    return [
+                        'id' => $order['id'],
+                        'items' => E::from($order['items'])
+                            ->where(function ($item) { return $item['quantity'] > 5; })
+                            ->toArray()
+                    ];
+                })
+                ->where(function ($order) {
+                    return count($order['items']) > 0;
+                });
         },
         "string lambda" => function () use ($DATA) {
-            consume_filtering_arrays(
-                E::from($DATA->orders)
-                    ->select(function ($order) {
-                        return [
-                            'id' => $order['id'],
-                            'items' => E::from($order['items'])->where('$v["quantity"] > 5')->toArray()
-                        ];
-                    })
-                    ->where('count($v["items"]) > 0')
-            );
+            return E::from($DATA->orders)
+                ->select(function ($order) {
+                    return [
+                        'id' => $order['id'],
+                        'items' => E::from($order['items'])->where('$v["quantity"] > 5')->toArray()
+                    ];
+                })
+                ->where('count($v["items"]) > 0');
         },
     ],
     [
         function () use ($DATA) {
-            consume_filtering_arrays(
-                G::from($DATA->orders)
-                    ->select(function ($order) {
-                        return [
-                            'id' => $order['id'],
-                            'items' => G::from($order['items'])
-                                ->where(function ($item) { return $item['quantity'] > 5; })
-                                ->toArray()
-                        ];
-                    })
-                    ->where(function ($order) {
-                        return count($order['items']) > 2;
-                    })
-            );
+            return G::from($DATA->orders)
+                ->select(function ($order) {
+                    return [
+                        'id' => $order['id'],
+                        'items' => G::from($order['items'])
+                            ->where(function ($item) { return $item['quantity'] > 5; })
+                            ->toArray()
+                    ];
+                })
+                ->where(function ($order) {
+                    return count($order['items']) > 0;
+                });
         },
     ],
     [
         function () use ($DATA) {
-            consume_filtering_arrays(
-                P::from($DATA->orders)
-                    ->select(function ($order) {
-                        return [
-                            'id' => $order['id'],
-                            'items' => P::from($order['items'])
-                                ->where(function ($item) { return $item['quantity'] > 5; })
-                                ->asArray()
-                        ];
-                    })
-                    ->where(function ($order) {
-                        return count($order['items']) > 2;
-                    })
-            );
+            return P::from($DATA->orders)
+                ->select(function ($order) {
+                    return [
+                        'id' => $order['id'],
+                        'items' => P::from($order['items'])
+                            ->where(function ($item) { return $item['quantity'] > 5; })
+                            ->asArray()
+                    ];
+                })
+                ->where(function ($order) {
+                    return count($order['items']) > 0;
+                });
         },
     ]);
 
-benchmark_linq_groups("Sorting arrays", 100,
+benchmark_linq_groups("Sorting arrays", 100, 'consume',
     [
         function () use ($DATA) {
             $orderedUsers = $DATA->users;
@@ -541,50 +538,46 @@ benchmark_linq_groups("Sorting arrays", 100,
                     if ($diff !== 0)
                         return -$diff;
                     $diff = strcmp($a['name'], $b['name']);
+                    if ($diff !== 0)
+                        return $diff;
+                    $diff = $a['id'] - $b['id'];
                     return $diff;
                 });
-            consume($orderedUsers);
+            return $orderedUsers;
         },
     ],
     [
         function () use ($DATA) {
-            consume(
-                E::from($DATA->users)
-                    ->orderByDescending(function ($u) { return $u['rating']; })
-                    ->thenBy(function ($u) { return $u['name']; })
-            );
+            return E::from($DATA->users)
+                ->orderByDescending(function ($u) { return $u['rating']; })
+                ->thenBy(function ($u) { return $u['name']; })
+                ->thenBy(function ($u) { return $u['id']; });
         },
         "string lambda" => function () use ($DATA) {
-            consume(
-                E::from($DATA->users)->orderByDescending('$v["rating"]')->thenBy('$v["name"]')
-            );
+            return E::from($DATA->users)->orderByDescending('$v["rating"]')->thenBy('$v["name"]')->thenBy('$v["id"]');
         },
     ],
     [
         function () use ($DATA) {
-            consume(
-                G::from($DATA->users)
-                    ->orderByDesc(function ($u) { return $u['rating']; })
-                    ->thenBy(function ($u) { return $u['name']; })
-            );
+            return G::from($DATA->users)
+                ->orderByDesc(function ($u) { return $u['rating']; })
+                ->thenBy(function ($u) { return $u['name']; })
+                ->thenBy(function ($u) { return $u['id']; });
         },
         "property path" => function () use ($DATA) {
-            consume(
-                G::from($DATA->users)->orderByDesc('[rating]')->thenBy('[name]')
-            );
+            return G::from($DATA->users)->orderByDesc('[rating]')->thenBy('[name]')->thenBy('[id]');
         },
     ],
     [
         function () use ($DATA) {
-            consume(
-                P::from($DATA->users)
-                    ->orderByDescending(function ($u) { return $u['rating']; })
-                    ->thenByAscending(function ($u) { return $u['name']; })
-            );
+            return P::from($DATA->users)
+                ->orderByDescending(function ($u) { return $u['rating']; })
+                ->thenByAscending(function ($u) { return $u['name']; })
+                ->thenByAscending(function ($u) { return $u['id']; });
         },
     ]);
 
-benchmark_linq_groups("Joining arrays", 100,
+benchmark_linq_groups("Joining arrays", 100, 'consume',
     [
         function () use ($DATA) {
             $usersByIds = [ ];
@@ -602,81 +595,71 @@ benchmark_linq_groups("Joining arrays", 100,
                     }
                 }
             }
-            consume($pairs);
+            return $pairs;
         },
     ],
     [
         function () use ($DATA) {
-            consume(
-                E::from($DATA->orders)
-                    ->join($DATA->users,
-                        function ($o) { return $o['customerId']; },
-                        function ($u) { return $u['id']; },
-                        function ($o, $u) {
-                            return [
-                                'order' => $o,
-                                'user' => $u,
-                            ];
-                        })
-            );
-        },
-        "string lambda" => function () use ($DATA) {
-            consume(
-                E::from($DATA->orders)
-                    ->join($DATA->users,
-                        '$o ==> $o["customerId"]', '$u ==> $u["id"]',
-                        '($o, $u) ==> [
-                            "order" => $o,
-                            "user" => $u,
-                        ]')
-            );
-        },
-    ],
-    [
-        function () use ($DATA) {
-            consume(
-                G::from($DATA->orders)
-                    ->join($DATA->users,
-                        function ($o) { return $o['customerId']; },
-                        function ($u) { return $u['id']; },
-                        function ($o, $u) {
-                            return [
-                                'order' => $o,
-                                'user' => $u,
-                            ];
-                        })
-            );
-        },
-        "property path" => function () use ($DATA) {
-            consume(
-                G::from($DATA->orders)
-                    ->join($DATA->users,
-                        '[customerId]', '[id]',
-                        function ($o, $u) {
-                            return [
-                                'order' => $o,
-                                'user' => $u,
-                            ];
-                        })
-            );
-        },
-    ],
-    [
-        function () use ($DATA) {
-            consume(
-                P::from($DATA->orders)
-                    ->join($DATA->users)
-                    ->onEquality(
-                        function ($o) { return $o['customerId']; },
-                        function ($u) { return $u['id']; }
-                    )
-                    ->to(function ($o, $u) {
+            return E::from($DATA->orders)
+                ->join($DATA->users,
+                    function ($o) { return $o['customerId']; },
+                    function ($u) { return $u['id']; },
+                    function ($o, $u) {
                         return [
                             'order' => $o,
                             'user' => $u,
                         ];
-                    })
-            );
+                    });
+        },
+        "string lambda" => function () use ($DATA) {
+            return E::from($DATA->orders)
+                ->join($DATA->users,
+                    '$o ==> $o["customerId"]', '$u ==> $u["id"]',
+                    '($o, $u) ==> [
+                        "order" => $o,
+                        "user" => $u,
+                    ]');
+        },
+    ],
+    [
+        function () use ($DATA) {
+            return G::from($DATA->orders)
+                ->join($DATA->users,
+                    function ($o) { return $o['customerId']; },
+                    function ($u) { return $u['id']; },
+                    function ($o, $u) {
+                        return [
+                            'order' => $o,
+                            'user' => $u,
+                        ];
+                    });
+        },
+        "property path" => function () use ($DATA) {
+            return G::from($DATA->orders)
+                ->join($DATA->users,
+                    '[customerId]', '[id]',
+                    function ($o, $u) {
+                        return [
+                            'order' => $o,
+                            'user' => $u,
+                        ];
+                    });
+        },
+    ],
+    [
+        function () use ($DATA) {
+            return P::from($DATA->orders)
+                ->join($DATA->users)
+                ->onEquality(
+                    function ($o) { return $o['customerId']; },
+                    function ($u) { return $u['id']; }
+                )
+                ->to(function ($o, $u) {
+                    return [
+                        'order' => $o,
+                        'user' => $u,
+                    ];
+                });
         },
     ]);
 
@@ -686,6 +669,7 @@ function consume_readme_sample ($e)
 }
 
 benchmark_linq_groups("Process data from ReadMe example", 5,
+    function ($e) { consume($e, [ 'products' => null ]); },
     [
         function () use ($DATA) {
             $productsSorted = [ ];
@@ -717,12 +701,12 @@ benchmark_linq_groups("Process data from ReadMe example", 5,
                     'products' => isset($productsSorted[$categoryId]) ? $productsSorted[$categoryId] : [ ],
                 ];
             }
-            consume_readme_sample($result);
+            return $result;
         },
     ],
     [
         function () use ($DATA) {
-            consume_readme_sample(E::from($DATA->categories)
+            return E::from($DATA->categories)
                 ->orderBy(function ($cat) { return $cat['name']; })
                 ->groupJoin(
                     from($DATA->products)
@@ -737,69 +721,63 @@ benchmark_linq_groups("Process data from ReadMe example", 5,
                             'products' => $prods
                         );
                     }
-                ));
+                );
         },
         "string lambda" => function () use ($DATA) {
-            consume_readme_sample(
-                E::from($DATA->categories)
-                    ->orderBy('$cat ==> $cat["name"]')
-                    ->groupJoin(
-                        from($DATA->products)
-                            ->where('$prod ==> $prod["quantity"] > 0')
-                            ->orderByDescending('$prod ==> $prod["quantity"]')
-                            ->thenBy('$prod ==> $prod["name"]'),
-                        '$cat ==> $cat["id"]', '$prod ==> $prod["catId"]',
-                        '($cat, $prods) ==> [
+            return E::from($DATA->categories)
+                ->orderBy('$cat ==> $cat["name"]')
+                ->groupJoin(
+                    from($DATA->products)
+                        ->where('$prod ==> $prod["quantity"] > 0')
+                        ->orderByDescending('$prod ==> $prod["quantity"]')
+                        ->thenBy('$prod ==> $prod["name"]'),
+                    '$cat ==> $cat["id"]', '$prod ==> $prod["catId"]',
+                    '($cat, $prods) ==> [
                             "name" => $cat["name"],
                             "products" => $prods
-                        ]')
-            );
+                        ]');
         },
     ],
     [
         function () use ($DATA) {
-            consume_readme_sample(
-                G::from($DATA->categories)
-                    ->orderBy(function ($cat) { return $cat['name']; })
-                    ->groupJoin(
-                        G::from($DATA->products)
-                            ->where(function ($prod) { return $prod['quantity'] > 0; })
-                            ->orderByDesc(function ($prod) { return $prod['quantity']; })
-                            ->thenBy(function ($prod) { return $prod['name']; }),
-                        function ($cat) { return $cat['id']; },
-                        function ($prod) { return $prod['catId']; },
-                        function ($cat, $prods) {
-                            return array(
-                                'name' => $cat['name'],
-                                'products' => $prods
-                            );
-                        }
-                    )
-            );
-        },
-    ],
-    [
-        function () use ($DATA) {
-            consume_readme_sample(
-                P::from($DATA->categories)
-                    ->orderByAscending(function ($cat) { return $cat['name']; })
-                    ->groupJoin(
-                        P::from($DATA->products)
-                            ->where(function ($prod) { return $prod['quantity'] > 0; })
-                            ->orderByDescending(function ($prod) { return $prod['quantity']; })
-                            ->thenByAscending(function ($prod) { return $prod['name']; })
-                    )
-                    ->onEquality(
-                        function ($cat) { return $cat['id']; },
-                        function ($prod) { return $prod['catId']; }
-                    )
-                    ->to(function ($cat, $prods) {
+            return G::from($DATA->categories)
+                ->orderBy(function ($cat) { return $cat['name']; })
+                ->groupJoin(
+                    G::from($DATA->products)
+                        ->where(function ($prod) { return $prod['quantity'] > 0; })
+                        ->orderByDesc(function ($prod) { return $prod['quantity']; })
+                        ->thenBy(function ($prod) { return $prod['name']; }),
+                    function ($cat) { return $cat['id']; },
+                    function ($prod) { return $prod['catId']; },
+                    function ($cat, $prods) {
                         return array(
                             'name' => $cat['name'],
                             'products' => $prods
                         );
-                    })
-            );
+                    }
+                );
+        },
+    ],
+    [
+        function () use ($DATA) {
+            return P::from($DATA->categories)
+                ->orderByAscending(function ($cat) { return $cat['name']; })
+                ->groupJoin(
+                    P::from($DATA->products)
+                        ->where(function ($prod) { return $prod['quantity'] > 0; })
+                        ->orderByDescending(function ($prod) { return $prod['quantity']; })
+                        ->thenByAscending(function ($prod) { return $prod['name']; })
+                )
+                ->onEquality(
+                    function ($cat) { return $cat['id']; },
+                    function ($prod) { return $prod['catId']; }
+                )
+                ->to(function ($cat, $prods) {
+                    return array(
+                        'name' => $cat['name'],
+                        'products' => $prods
+                    );
+                });
         },
     ]);
 
