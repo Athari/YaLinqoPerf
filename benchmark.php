@@ -245,7 +245,7 @@ benchmark_linq_groups("Counting values in arrays", 100, null,
             }
             return $numberOrders;
         },
-        "arrays functions" => function () use ($DATA) {
+        "array functions" => function () use ($DATA) {
             return count(
                 array_filter(
                     $DATA->orders,
@@ -293,7 +293,7 @@ benchmark_linq_groups("Counting values in arrays deep", 100, null,
             }
             return $numberOrders;
         },
-        "arrays functions" => function () use ($DATA) {
+        "array functions" => function () use ($DATA) {
             return count(
                 array_filter(
                     $DATA->orders,
@@ -348,7 +348,7 @@ benchmark_linq_groups("Filtering values in arrays", 100, 'consume',
             }
             return $filteredOrders;
         },
-        "arrays functions" => function () use ($DATA) {
+        "array functions" => function () use ($DATA) {
             return array_filter(
                 $DATA->orders,
                 function ($order) { return count($order['items']) > 5; }
@@ -399,7 +399,7 @@ benchmark_linq_groups("Filtering values in arrays deep", 100,
             }
             return $filteredOrders;
         },
-        "arrays functions" => function () use ($DATA) {
+        "array functions" => function () use ($DATA) {
             return array_filter(
                 array_map(
                     function ($order) {
@@ -711,11 +711,6 @@ benchmark_linq_groups("Aggregating arrays custom", 100, null,
                 ->aggregate(function ($a, $q) { return $a * $q; });
         },
     ]);
-
-function consume_readme_sample ($e)
-{
-    consume($e, [ 'products' => null ]);
-}
 
 benchmark_linq_groups("Process data from ReadMe example", 5,
     function ($e) { consume($e, [ 'products' => null ]); },
