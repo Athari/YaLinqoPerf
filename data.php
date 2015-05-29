@@ -17,7 +17,7 @@ class SampleData
         $this->orders = $this->generateOrders($n);
     }
 
-    function generateProductCategories ($n)
+    private function generateProductCategories ($n)
     {
         $categories = [ ];
         for ($i = 1; $i <= $n; $i++) {
@@ -30,7 +30,7 @@ class SampleData
         return $categories;
     }
 
-    function generateProducts ($n)
+    private function generateProducts ($n)
     {
         $products = [ ];
         for ($i = 1; $i <= $n; $i++) {
@@ -44,7 +44,7 @@ class SampleData
         return $products;
     }
 
-    function generateUsers ($n)
+    private function generateUsers ($n)
     {
         $users = [ ];
         for ($i = 1; $i <= $n; $i++) {
@@ -57,7 +57,7 @@ class SampleData
         return $users;
     }
 
-    function generateOrders ($n)
+    private function generateOrders ($n)
     {
         $orders = [ ];
         for ($i = 1; $i <= $n; $i++) {
@@ -70,7 +70,7 @@ class SampleData
         return $orders;
     }
 
-    function generateOrderItems ($n)
+    private function generateOrderItems ($n)
     {
         $orders = [ ];
         for ($i = 1; $i <= $n; $i++) {

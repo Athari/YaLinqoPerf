@@ -530,6 +530,156 @@ benchmark_linq_groups("Filtering values in arrays deep", 100,
         },
     ]);
 
+benchmark_linq_groups("Sorting arrays", 100,
+    [
+        function () use ($DATA) {
+            $orderedUsers = $DATA->users;
+            usort(
+                $orderedUsers,
+                function ($a, $b) {
+                    $diff = $a['rating'] - $b['rating'];
+                    if ($diff !== 0)
+                        return -$diff;
+                    $diff = strcmp($a['name'], $b['name']);
+                    return $diff;
+                });
+            consume($orderedUsers);
+        },
+    ],
+    [
+        function () use ($DATA) {
+            consume(
+                E::from($DATA->users)
+                    ->orderByDescending(function ($u) { return $u['rating']; })
+                    ->thenBy(function ($u) { return $u['name']; })
+            );
+        },
+        "string lambda" => function () use ($DATA) {
+            consume(
+                E::from($DATA->users)->orderByDescending('$v["rating"]')->thenBy('$v["name"]')
+            );
+        },
+    ],
+    [
+        function () use ($DATA) {
+            consume(
+                G::from($DATA->users)
+                    ->orderByDesc(function ($u) { return $u['rating']; })
+                    ->thenBy(function ($u) { return $u['name']; })
+            );
+        },
+        "property path" => function () use ($DATA) {
+            consume(
+                G::from($DATA->users)->orderByDesc('[rating]')->thenBy('[name]')
+            );
+        },
+    ],
+    [
+        function () use ($DATA) {
+            consume(
+                P::from($DATA->users)
+                    ->orderByDescending(function ($u) { return $u['rating']; })
+                    ->thenByAscending(function ($u) { return $u['name']; })
+            );
+        },
+    ]);
+
+benchmark_linq_groups("Joining arrays", 100,
+    [
+        function () use ($DATA) {
+            $usersByIds = [ ];
+            foreach ($DATA->users as $user)
+                $usersByIds[$user['id']][] = $user;
+            $pairs = [ ];
+            foreach ($DATA->orders as $order) {
+                $id = $order['customerId'];
+                if (isset($usersByIds[$id])) {
+                    foreach ($usersByIds[$id] as $user) {
+                        $pairs[] = [
+                            'order' => $order,
+                            'user' => $user,
+                        ];
+                    }
+                }
+            }
+            consume($pairs);
+        },
+    ],
+    [
+        function () use ($DATA) {
+            consume(
+                E::from($DATA->orders)
+                    ->join($DATA->users,
+                        function ($o) { return $o['customerId']; },
+                        function ($u) { return $u['id']; },
+                        function ($o, $u) {
+                            return [
+                                'order' => $o,
+                                'user' => $u,
+                            ];
+                        })
+            );
+        },
+        "string lambda" => function () use ($DATA) {
+            consume(
+                E::from($DATA->orders)
+                    ->join($DATA->users,
+                        '$o ==> $o["customerId"]', '$u ==> $u["id"]',
+                        '($o, $u) ==> [
+                            "order" => $o,
+                            "user" => $u,
+                        ]')
+            );
+        },
+    ],
+    [
+        function () use ($DATA) {
+            consume(
+                G::from($DATA->orders)
+                    ->join($DATA->users,
+                        function ($o) { return $o['customerId']; },
+                        function ($u) { return $u['id']; },
+                        function ($o, $u) {
+                            return [
+                                'order' => $o,
+                                'user' => $u,
+                            ];
+                        })
+            );
+        },
+        "property path" => function () use ($DATA) {
+            consume(
+                G::from($DATA->orders)
+                    ->join($DATA->users,
+                        '[customerId]', '[id]',
+                        function ($o, $u) {
+                            return [
+                                'order' => $o,
+                                'user' => $u,
+                            ];
+                        })
+            );
+        },
+    ],
+    [
+        function () use ($DATA) {
+            consume(
+                P::from($DATA->orders)
+                    ->join($DATA->users)
+                    ->onEquality(
+                        function ($o) { return $o['customerId']; },
+                        function ($u) { return $u['id']; }
+                    )
+                    ->to(function ($o, $u) {
+                        return [
+                            'order' => $o,
+                            'user' => $u,
+                        ];
+                    })
+            );
+        },
+    ]);
+
 function consume_readme_sample ($e)
 {
     consume($e, [ 'products' => null ]);
@@ -590,58 +740,66 @@ benchmark_linq_groups("Process data from ReadMe example", 5,
                 ));
         },
         "string lambda" => function () use ($DATA) {
-            consume_readme_sample(E::from($DATA->categories)
-                ->orderBy('$cat ==> $cat["name"]')
-                ->groupJoin(
-                    from($DATA->products)
-                        ->where('$prod ==> $prod["quantity"] > 0')
-                        ->orderByDescending('$prod ==> $prod["quantity"]')
-                        ->thenBy('$prod ==> $prod["name"]'),
-                    '$cat ==> $cat["id"]', '$prod ==> $prod["catId"]',
-                    '($cat, $prods) ==> [
+            consume_readme_sample(
+                E::from($DATA->categories)
+                    ->orderBy('$cat ==> $cat["name"]')
+                    ->groupJoin(
+                        from($DATA->products)
+                            ->where('$prod ==> $prod["quantity"] > 0')
+                            ->orderByDescending('$prod ==> $prod["quantity"]')
+                            ->thenBy('$prod ==> $prod["name"]'),
+                        '$cat ==> $cat["id"]', '$prod ==> $prod["catId"]',
+                        '($cat, $prods) ==> [
                             "name" => $cat["name"],
                             "products" => $prods
-                        ]'
-                ));
+                        ]')
+            );
         },
     ],
     [
         function () use ($DATA) {
-            consume_readme_sample(G::from($DATA->categories)
-                ->orderBy(function ($cat) { return $cat['name']; })
-                ->groupJoin(
-                    G::from($DATA->products)
-                        ->where(function ($prod) { return $prod['quantity'] > 0; })
-                        ->orderByDesc(function ($prod) { return $prod['quantity']; })
-                        ->thenBy(function ($prod) { return $prod['name']; }),
-                    function ($cat) { return $cat['id']; },
-                    function ($prod) { return $prod['catId']; },
-                    function ($cat, $prods) {
+            consume_readme_sample(
+                G::from($DATA->categories)
+                    ->orderBy(function ($cat) { return $cat['name']; })
+                    ->groupJoin(
+                        G::from($DATA->products)
+                            ->where(function ($prod) { return $prod['quantity'] > 0; })
+                            ->orderByDesc(function ($prod) { return $prod['quantity']; })
+                            ->thenBy(function ($prod) { return $prod['name']; }),
+                        function ($cat) { return $cat['id']; },
+                        function ($prod) { return $prod['catId']; },
+                        function ($cat, $prods) {
+                            return array(
+                                'name' => $cat['name'],
+                                'products' => $prods
+                            );
+                        }
+                    )
+            );
+        },
+    ],
+    [
+        function () use ($DATA) {
+            consume_readme_sample(
+                P::from($DATA->categories)
+                    ->orderByAscending(function ($cat) { return $cat['name']; })
+                    ->groupJoin(
+                        P::from($DATA->products)
+                            ->where(function ($prod) { return $prod['quantity'] > 0; })
+                            ->orderByDescending(function ($prod) { return $prod['quantity']; })
+                            ->thenByAscending(function ($prod) { return $prod['name']; })
+                    )
+                    ->onEquality(
+                        function ($cat) { return $cat['id']; },
+                        function ($prod) { return $prod['catId']; }
+                    )
+                    ->to(function ($cat, $prods) {
                         return array(
                             'name' => $cat['name'],
                             'products' => $prods
                         );
-                    }
-                ));
-        },
-    ],
-    [
-        function () use ($DATA) {
-            consume_readme_sample(P::from($DATA->categories)
-                ->orderByAscending(function ($cat) { return $cat['name']; })
-                ->groupJoin(
-                    P::from($DATA->products)
-                        ->where(function ($prod) { return $prod['quantity'] > 0; })
-                        ->orderByDescending(function ($prod) { return $prod['quantity']; })
-                        ->thenByAscending(function ($prod) { return $prod['name']; })
-                )
-                ->on(function ($cat, $prod) { return $cat['id'] == $prod['catId']; })
-                ->to(function ($cat, $prods) {
-                    return array(
-                        'name' => $cat['name'],
-                        'products' => $prods
-                    );
-                }));
+                    })
+            );
         },
     ]);
 

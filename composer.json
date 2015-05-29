@@ -10,7 +10,7 @@
     ],
     "require": {
         "php": ">=5.5",
-        "athari/yalinqo": "~2.0",
+        "athari/yalinqo": "@dev",
         "ginq/ginq": "~0.2",
         "timetoogo/pinq": "~3.1"
     },
