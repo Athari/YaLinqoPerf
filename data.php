@@ -38,7 +38,7 @@ class SampleData
                 'id' => $i,
                 'name' => 'product-' . uniqid(),
                 'catId' => array_rand($this->categories)['id'],
-                'quantity' => rand(0, 1000),
+                'quantity' => rand(1, 100),
             ];
         }
         return $products;

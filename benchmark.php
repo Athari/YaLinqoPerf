@@ -126,7 +126,7 @@ function consume ($array, $props = null)
 $ITER_MAX = isset($_SERVER['argv'][1]) ? (int)$_SERVER['argv'][1] : 100;
 $DATA = new SampleData($ITER_MAX);
 
-benchmark_linq_groups("Iterate over $ITER_MAX ints", 100, null,
+benchmark_linq_groups("Iterating over $ITER_MAX ints", 100, null,
     [
         "for" => function () use ($ITER_MAX) {
             $j = null;
@@ -166,7 +166,7 @@ benchmark_linq_groups("Iterate over $ITER_MAX ints", 100, null,
         },
     ]);
 
-benchmark_linq_groups("Generate array of $ITER_MAX integers", 100, 'consume',
+benchmark_linq_groups("Generating array of $ITER_MAX integers", 100, 'consume',
     [
         "for" =>
             function () use ($ITER_MAX) {
@@ -196,7 +196,7 @@ benchmark_linq_groups("Generate array of $ITER_MAX integers", 100, 'consume',
         },
     ]);
 
-benchmark_linq_groups("Generate lookup of $ITER_MAX floats, calculate sum", 100, null,
+benchmark_linq_groups("Generating lookup of $ITER_MAX floats, calculate sum", 100, null,
     [
         function () use ($ITER_MAX) {
             $dic = [ ];
@@ -377,55 +377,6 @@ benchmark_linq_groups("Filtering values in arrays", 100, 'consume',
                 ->where(function ($order) { return count($order['items']) > 5; });
         },
     ]);
-
-/*benchmark_linq_groups("Filtering property values in arrays", 100, 'consume',
-    [
-        "for" => function () use ($DATA) {
-            $filteredItems = [ ];
-            foreach ($DATA->orders as $order) {
-                $firstItem = $order['items'][0];
-                if ($firstItem['quantity'] > 0)
-                    $filteredItems[] = $firstItem;
-            }
-            return $filteredItems;
-        },
-        "arrays functions" => function () use ($DATA) {
-            return array_map(
-                function ($order) { return $order['items'][0]; },
-                array_filter(
-                    $DATA->orders,
-                    function ($order) { return $order['items'][0]['quantity'] > 0; }
-                )
-            );
-        },
-    ],
-    [
-        function () use ($DATA) {
-            return E::from($DATA->orders)
-                ->select(function ($order) { return $order['items'][0]; })
-                ->where(function ($firstItem) { return $firstItem['quantity'] > 0; });
-        },
-        "string lambda" => function () use ($DATA) {
-            return E::from($DATA->orders)->select('$v["items"][0]')->where('$v["quantity"] > 0');
-        },
-    ],
-    [
-        function () use ($DATA) {
-            return G::from($DATA->orders)
-                ->select(function ($order) { return $order['items'][0]; })
-                ->where(function ($firstItem) { return $firstItem['quantity'] > 0; });
-        },
-        "property path" => function () use ($DATA) {
-            return G::from($DATA->orders)->select('[items][0]')->where('[quantity]');
-        },
-    ],
-    [
-        function () use ($DATA) {
-            return P::from($DATA->orders)
-                ->select(function ($order) { return $order['items'][0]; })
-                ->where(function ($firstItem) { return $firstItem['quantity'] > 0; });
-        },
-    ]);*/
 
 benchmark_linq_groups("Filtering values in arrays deep", 100,
     function ($e) { consume($e, [ 'items' => null ]); },
@@ -660,6 +611,104 @@ benchmark_linq_groups("Joining arrays", 100, 'consume',
                         'user' => $u,
                     ];
                 });
+        },
+    ]);
+
+benchmark_linq_groups("Aggregating arrays", 100, null,
+    [
+        "for" => function () use ($DATA) {
+            $sum = 0;
+            foreach ($DATA->products as $p)
+                $sum += $p['quantity'];
+            $avg = 0;
+            foreach ($DATA->products as $p)
+                $avg += $p['quantity'];
+            $avg /= count($DATA->products);
+            $min = PHP_INT_MAX;
+            foreach ($DATA->products as $p)
+                $min = min($min, $p['quantity']);
+            $max = -PHP_INT_MAX;
+            foreach ($DATA->products as $p)
+                $max = max($max, $p['quantity']);
+            return "$sum-$avg-$min-$max";
+        },
+        "array functions" => function () use ($DATA) {
+            $sum = array_sum(array_map(function ($p) { return $p['quantity']; }, $DATA->products));
+            $avg = array_sum(array_map(function ($p) { return $p['quantity']; }, $DATA->products)) / count($DATA->products);
+            $min = min(array_map(function ($p) { return $p['quantity']; }, $DATA->products));
+            $max = max(array_map(function ($p) { return $p['quantity']; }, $DATA->products));
+            return "$sum-$avg-$min-$max";
+        },
+    ],
+    [
+        function () use ($DATA) {
+            $sum = E::from($DATA->products)->sum(function ($p) { return $p['quantity']; });
+            $avg = E::from($DATA->products)->average(function ($p) { return $p['quantity']; });
+            $min = E::from($DATA->products)->min(function ($p) { return $p['quantity']; });
+            $max = E::from($DATA->products)->max(function ($p) { return $p['quantity']; });
+            return "$sum-$avg-$min-$max";
+        },
+        "string lambda" => function () use ($DATA) {
+            $sum = E::from($DATA->products)->sum('$v["quantity"]');
+            $avg = E::from($DATA->products)->average('$v["quantity"]');
+            $min = E::from($DATA->products)->min('$v["quantity"]');
+            $max = E::from($DATA->products)->max('$v["quantity"]');
+            return "$sum-$avg-$min-$max";
+        },
+    ],
+    [
+        function () use ($DATA) {
+            $sum = G::from($DATA->products)->sum(function ($p) { return $p['quantity']; });
+            $avg = G::from($DATA->products)->average(function ($p) { return $p['quantity']; });
+            $min = G::from($DATA->products)->min(function ($p) { return $p['quantity']; });
+            $max = G::from($DATA->products)->max(function ($p) { return $p['quantity']; });
+            return "$sum-$avg-$min-$max";
+        },
+        "property path" => function () use ($DATA) {
+            $sum = G::from($DATA->products)->sum('[quantity]');
+            $avg = G::from($DATA->products)->average('[quantity]');
+            $min = G::from($DATA->products)->min('[quantity]');
+            $max = G::from($DATA->products)->max('[quantity]');
+            return "$sum-$avg-$min-$max";
+        },
+    ],
+    [
+        function () use ($DATA) {
+            $sum = P::from($DATA->products)->sum(function ($p) { return $p['quantity']; });
+            $avg = P::from($DATA->products)->average(function ($p) { return $p['quantity']; });
+            $min = P::from($DATA->products)->minimum(function ($p) { return $p['quantity']; });
+            $max = P::from($DATA->products)->maximum(function ($p) { return $p['quantity']; });
+            return "$sum-$avg-$min-$max";
+        },
+    ]);
+
+benchmark_linq_groups("Aggregating arrays custom", 100, null,
+    [
+        function () use ($DATA) {
+            $mult = 1;
+            foreach ($DATA->products as $p)
+                $mult *= $p['quantity'];
+            return $mult;
+        },
+    ],
+    [
+        function () use ($DATA) {
+            return E::from($DATA->products)->aggregate(function ($a, $p) { return $a * $p['quantity']; }, 1);
+        },
+        "string lambda" => function () use ($DATA) {
+            return E::from($DATA->products)->aggregate('$a * $v["quantity"]', 1);
+        },
+    ],
+    [
+        function () use ($DATA) {
+            return G::from($DATA->products)->aggregate(1, function ($a, $p) { return $a * $p['quantity']; });
+        },
+    ],
+    [
+        function () use ($DATA) {
+            return P::from($DATA->products)
+                ->select(function ($p) { return $p['quantity']; })
+                ->aggregate(function ($a, $q) { return $a * $q; });
         },
     ]);
 
