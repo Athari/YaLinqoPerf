@@ -531,14 +531,14 @@ benchmark_linq_groups("Sorting arrays", 100, 'consume',
 benchmark_linq_groups("Joining arrays", 100, 'consume',
     [
         function () use ($DATA) {
-            $usersByIds = [ ];
-            foreach ($DATA->users as $user)
-                $usersByIds[$user['id']][] = $user;
+            $ordersByCustomerId = [ ];
+            foreach ($DATA->orders as $order)
+                $ordersByCustomerId[$order['customerId']][] = $order;
             $pairs = [ ];
-            foreach ($DATA->orders as $order) {
-                $id = $order['customerId'];
-                if (isset($usersByIds[$id])) {
-                    foreach ($usersByIds[$id] as $user) {
+            foreach ($DATA->users as $user) {
+                $userId = $user['id'];
+                if (isset($ordersByCustomerId[$userId])) {
+                    foreach ($ordersByCustomerId[$userId] as $order) {
                         $pairs[] = [
                             'order' => $order,
                             'user' => $user,
