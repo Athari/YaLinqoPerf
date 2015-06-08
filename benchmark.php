@@ -25,6 +25,7 @@ function benchmark_operation ($count, $consume, $operation)
             if ($consume !== null)
                 $consume($return);
         }
+        $return = $operation();
         if (!is_scalar($return))
             $return = E::from($return)->toListDeep();
         $result = true;
