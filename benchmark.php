@@ -481,7 +481,25 @@ benchmark_linq_groups("Filtering values in arrays deep", 100,
 
 benchmark_linq_groups("Sorting arrays", 100, 'consume',
     [
-        function () use ($DATA) {
+        "multisort" => function () use ($DATA) {
+            $orderedUsers = $DATA->users;
+            $ratings = [ ];
+            foreach ($orderedUsers as $k => $user)
+                $ratings[$k] = $user['rating'];
+            $names = [ ];
+            foreach ($orderedUsers as $k => $user)
+                $names[$k] = $user['name'];
+            $ids = [ ];
+            foreach ($orderedUsers as $k => $user)
+                $ids[$k] = $user['id'];
+            array_multisort(
+                $ratings, SORT_DESC, SORT_NUMERIC,
+                $names, SORT_ASC, SORT_STRING,
+                $ids, SORT_ASC, SORT_NUMERIC,
+                $orderedUsers);
+            return $orderedUsers;
+        },
+        "usort" => function () use ($DATA) {
             $orderedUsers = $DATA->users;
             usort(
                 $orderedUsers,
@@ -507,6 +525,12 @@ benchmark_linq_groups("Sorting arrays", 100, 'consume',
         },
         "string lambda" => function () use ($DATA) {
             return E::from($DATA->users)->orderByDescending('$v["rating"]')->thenBy('$v["name"]')->thenBy('$v["id"]');
+        },
+        "multisort" => function () use ($DATA) {
+            return E::from($DATA->users)
+                ->orderByDir(SORT_DESC, '$v["rating"]', SORT_NUMERIC)
+                ->thenByDir(SORT_ASC, '$v["name"]', SORT_STRING)
+                ->thenByDir(SORT_ASC, '$v["id"]', SORT_NUMERIC);
         },
     ],
     [
@@ -716,7 +740,45 @@ benchmark_linq_groups("Aggregating arrays custom", 100, null,
 benchmark_linq_groups("Process data from ReadMe example", 5,
     function ($e) { consume($e, [ 'products' => null ]); },
     [
-        function () use ($DATA) {
+        "multisort" => function () use ($DATA) {
+            $productsSorted = [ ];
+            foreach ($DATA->products as $product) {
+                if ($product['quantity'] > 0) {
+                    if (empty($productsSorted[$product['catId']]))
+                        $productsSorted[$product['catId']] = [ ];
+                    $productsSorted[$product['catId']][] = $product;
+                }
+            }
+            foreach ($productsSorted as $catId => $products) {
+                $quantities = [ ];
+                foreach ($productsSorted[$catId] as $k => $product)
+                    $quantities[$k] = $product['quantity'];
+                $names = [ ];
+                foreach ($productsSorted[$catId] as $k => $product)
+                    $names[$k] = $product['name'];
+                array_multisort(
+                    $quantities, SORT_DESC, SORT_NUMERIC,
+                    $names, SORT_ASC, SORT_STRING,
+                    $productsSorted[$catId]);
+            }
+            $categoriesSorted = $DATA->categories;
+            $names = [ ];
+            foreach ($categoriesSorted as $k => $category)
+                $names[$k] = $category['name'];
+            array_multisort(
+                $names, SORT_ASC, SORT_STRING,
+                $categoriesSorted);
+            $result = [ ];
+            foreach ($categoriesSorted as $category) {
+                $categoryId = $category['id'];
+                $result[$category['id']] = [
+                    'name' => $category['name'],
+                    'products' => isset($productsSorted[$categoryId]) ? $productsSorted[$categoryId] : [ ],
+                ];
+            }
+            return $result;
+        },
+        "usort" => function () use ($DATA) {
             $productsSorted = [ ];
             foreach ($DATA->products as $product) {
                 if ($product['quantity'] > 0) {
