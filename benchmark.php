@@ -479,7 +479,47 @@ benchmark_linq_groups("Filtering values in arrays deep", 100,
         },
     ]);
 
-benchmark_linq_groups("Sorting arrays", 100, 'consume',
+benchmark_linq_groups("Sorting arrays of strings", 100, 'consume',
+    [
+        function () use ($DATA) {
+            $sortedStrings = $DATA->strings;
+            arsort($sortedStrings, SORT_NATURAL | SORT_FLAG_CASE);
+            return $sortedStrings;
+        },
+    ],
+    [
+        function () use ($DATA) {
+            return E::from($DATA->strings)->orderByDescending(null, 'strnatcasecmp');
+        },
+        "sort flags" => function () use ($DATA) {
+            return E::from($DATA->strings)->orderByDir(SORT_DESC, null, SORT_NATURAL | SORT_FLAG_CASE);
+        },
+        "callback" => function () use ($DATA) {
+            return E::from($DATA->strings)->orderByDescending(
+                function ($s) { return $s; },
+                function ($a, $b) { return strnatcasecmp($a, $b); }
+            );
+        },
+    ],
+    [
+        function () use ($DATA) {
+            //return G::from($DATA->strings)->orderByDesc('strnatcasecmp');
+            return new \Ginq\OrderingGinq(
+                new \ArrayIterator($DATA->strings),
+                new \Ginq\Comparer\DelegateComparer(function ($a, $b) {
+                    return -strnatcasecmp($a, $b);
+                })
+            );
+        },
+    ],
+    [
+        function () use ($DATA) {
+            //return P::from($DATA->strings)->orderByDescending(function ($v) { return $v; });
+            not_implemented();
+        },
+    ]);
+
+benchmark_linq_groups("Sorting arrays of objects", 100, 'consume',
     [
         "multisort" => function () use ($DATA) {
             $orderedUsers = $DATA->users;
@@ -526,7 +566,7 @@ benchmark_linq_groups("Sorting arrays", 100, 'consume',
         "string lambda" => function () use ($DATA) {
             return E::from($DATA->users)->orderByDescending('$v["rating"]')->thenBy('$v["name"]')->thenBy('$v["id"]');
         },
-        "multisort" => function () use ($DATA) {
+        "sort flags" => function () use ($DATA) {
             return E::from($DATA->users)
                 ->orderByDir(SORT_DESC, '$v["rating"]', SORT_NUMERIC)
                 ->thenByDir(SORT_ASC, '$v["name"]', SORT_STRING)
@@ -709,11 +749,14 @@ benchmark_linq_groups("Aggregating arrays", 100, null,
 
 benchmark_linq_groups("Aggregating arrays custom", 100, null,
     [
-        function () use ($DATA) {
+        "for" => function () use ($DATA) {
             $mult = 1;
             foreach ($DATA->products as $p)
                 $mult *= $p['quantity'];
             return $mult;
+        },
+        "array functions" => function () use ($DATA) {
+            return array_reduce($DATA->products, function ($a, $p) { return $a * $p['quantity']; }, 1);
         },
     ],
     [

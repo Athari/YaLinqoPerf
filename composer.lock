@@ -12,12 +12,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/Athari/YaLinqo.git",
-                "reference": "66daff38a4ce9d3243996f1205bd9cb0d9c97eff"
+                "reference": "108802719673eb6349b8c7492f49a6a3eed751ca"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Athari/YaLinqo/zipball/66daff38a4ce9d3243996f1205bd9cb0d9c97eff",
-                "reference": "66daff38a4ce9d3243996f1205bd9cb0d9c97eff",
+                "url": "https://api.github.com/repos/Athari/YaLinqo/zipball/108802719673eb6349b8c7492f49a6a3eed751ca",
+                "reference": "108802719673eb6349b8c7492f49a6a3eed751ca",
                 "shasum": ""
             },
             "require": {
@@ -36,28 +36,32 @@
                 }
             },
             "autoload": {
+                "psr-4": {
+                    "YaLinqo\\": "YaLinqo/"
+                },
                 "files": [
                     "YaLinqo/Linq.php"
                 ]
             },
             "notification-url": "https://packagist.org/downloads/",
             "license": [
-                "Simplified BSD"
+                "BSD-2-Clause"
             ],
             "authors": [
                 {
-                    "name": "Alexander Prokhorov"
+                    "name": "Alexander Prokhorov",
+                    "homepage": "https://github.com/Athari/"
                 }
             ],
             "description": "YaLinqo, a LINQ-to-objects library for PHP",
-            "homepage": "https://github.com/Athari/YaLinqo",
+            "homepage": "http://athari.github.io/YaLinqo",
             "keywords": [
                 "linq",
                 "linqo",
                 "query",
                 "statistic"
             ],
-            "time": "2015-06-08 14:01:37"
+            "time": "2015-06-09 13:06:14"
         },
         {
             "name": "ginq/ginq",
@@ -475,16 +479,16 @@
         },
         {
             "name": "phpunit/php-code-coverage",
-            "version": "2.1.4",
+            "version": "2.1.5",
             "source": {
                 "type": "git",
                 "url": "https://github.com/sebastianbergmann/php-code-coverage.git",
-                "reference": "3703c4bb67c8700957dd41c843254658539d091d"
+                "reference": "be2286cb8c7e1773eded49d9719219e6f74f9e3e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sebastianbergmann/php-code-coverage/zipball/3703c4bb67c8700957dd41c843254658539d091d",
-                "reference": "3703c4bb67c8700957dd41c843254658539d091d",
+                "url": "https://api.github.com/repos/sebastianbergmann/php-code-coverage/zipball/be2286cb8c7e1773eded49d9719219e6f74f9e3e",
+                "reference": "be2286cb8c7e1773eded49d9719219e6f74f9e3e",
                 "shasum": ""
             },
             "require": {
@@ -533,7 +537,7 @@
                 "testing",
                 "xunit"
             ],
-            "time": "2015-06-06 08:33:23"
+            "time": "2015-06-09 13:05:42"
         },
         {
             "name": "phpunit/php-file-iterator",

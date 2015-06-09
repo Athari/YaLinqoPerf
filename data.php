@@ -6,6 +6,7 @@ class SampleData
     public $products;
     public $users;
     public $orders;
+    public $strings;
 
     function __construct ($n)
     {
@@ -15,6 +16,7 @@ class SampleData
         $this->products = $this->generateProducts($n);
         $this->users = $this->generateUsers($n / 10);
         $this->orders = $this->generateOrders($n);
+        $this->strings = $this->generateStrings($n);
     }
 
     private function generateProductCategories ($n)
@@ -23,8 +25,8 @@ class SampleData
         for ($i = 1; $i <= $n; $i++) {
             $categories[] = array(
                 'id' => $i,
-                'name' => 'category-' . uniqid(),
-                'desc' => 'category-desc-' . uniqid() . '-' . uniqid(),
+                'name' => $this->randomString('category'),
+                'desc' => $this->randomString('category-desc') . $this->randomString(),
             );
         }
         return $categories;
@@ -36,7 +38,7 @@ class SampleData
         for ($i = 1; $i <= $n; $i++) {
             $products[] = [
                 'id' => $i,
-                'name' => 'product-' . uniqid(),
+                'name' => $this->randomString('product'),
                 'catId' => array_rand($this->categories)['id'],
                 'quantity' => rand(1, 100),
             ];
@@ -50,7 +52,7 @@ class SampleData
         for ($i = 1; $i <= $n; $i++) {
             $users[] = [
                 'id' => $i,
-                'name' => 'user-' . uniqid(),
+                'name' => $this->randomString('user'),
                 'rating' => rand(0, 10),
             ];
         }
@@ -80,5 +82,19 @@ class SampleData
             ];
         }
         return $items;
+    }
+
+    private function generateStrings ($n)
+    {
+        $strings = [ ];
+        for ($i = 1; $i <= $n; $i++) {
+            $strings[] = $this->randomString('s');
+        }
+        return $strings;
+    }
+
+    private function randomString ($prefix = '')
+    {
+        return uniqid("$prefix-", true);
     }
 }
