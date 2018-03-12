@@ -206,6 +206,12 @@ benchmark_linq_groups("Iterating over $ITER_MAX ints", 100, null,
                 $j = $i;
             return $j;
         },
+        'generator' => function () use ($ITER_MAX) {
+            $j = null;
+            foreach (new S(xrange(0, $ITER_MAX - 1)) as $i)
+                $j = $i;
+                return $j;
+        },
     ]);
 
 benchmark_linq_groups("Generating array of $ITER_MAX integers", 100, 'consume',
@@ -220,6 +226,10 @@ benchmark_linq_groups("Generating array of $ITER_MAX integers", 100, 'consume',
         "array functions" =>
             function () use ($ITER_MAX) {
                 return range(0, $ITER_MAX - 1);
+            },
+        "xrange" =>
+            function () use ($ITER_MAX) {
+                return xrange(0, $ITER_MAX - 1);
             },
     ],
     [
