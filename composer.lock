@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#composer-lock-the-lock-file",
         "This file is @generated automatically"
     ],
-    "content-hash": "2be1db2a4faac943a4848511aa27cbbf",
+    "content-hash": "ee09bbe36ca95c89d1f363dbd45b83c8",
     "packages": [
         {
             "name": "athari/yalinqo",
@@ -159,6 +159,50 @@
                 "php"
             ],
             "time": "2018-02-28T20:30:58+00:00"
+        },
+        {
+            "name": "sanmai/pipeline",
+            "version": "v0.7",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/sanmai/pipeline.git",
+                "reference": "4e3086104bbf0ede488fb321cb686d6068448af6"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/sanmai/pipeline/zipball/4e3086104bbf0ede488fb321cb686d6068448af6",
+                "reference": "4e3086104bbf0ede488fb321cb686d6068448af6",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=7"
+            },
+            "require-dev": {
+                "codacy/coverage": "^1.4",
+                "friendsofphp/php-cs-fixer": "^2.4",
+                "league/pipeline": "^0.3",
+                "phan/phan": "^0.12.1",
+                "phpunit/phpunit": "^6.1",
+                "satooshi/php-coveralls": "^1.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Pipeline\\": "src/Pipeline/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "Apache-2.0"
+            ],
+            "authors": [
+                {
+                    "name": "Alexey Kopytko",
+                    "email": "alexey@kopytko.com"
+                }
+            ],
+            "description": "Not your general purpose collection pipeline for PHP",
+            "time": "2018-03-09T16:35:08+00:00"
         },
         {
             "name": "symfony/expression-language",
