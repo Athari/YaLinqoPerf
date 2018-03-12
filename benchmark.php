@@ -15,6 +15,18 @@ function is_cli ()
     return php_sapi_name() == 'cli' && isset($_SERVER['PROMPT']);
 }
 
+function xrange($start, $limit, $step = 1) {
+    if ($start < $limit) {
+        for ($i = $start; $i <= $limit; $i += $step) {
+            yield $i;
+        }
+    } else {
+        for ($i = $start; $i >= $limit; $i += $step) {
+            yield $i;
+        }
+    }
+}
+
 function benchmark_operation ($count, $consume, $operation)
 {
     $time = microtime(true);
@@ -165,6 +177,13 @@ benchmark_linq_groups("Iterating over $ITER_MAX ints", 100, null,
             $j = null;
             foreach (G::range(0, $ITER_MAX - 1) as $i)
                 $j = $i;
+            return $j;
+        },
+        "generator" => function () use ($ITER_MAX) {
+            $j = null;
+            foreach (xrange(0, $ITER_MAX - 1) as $i) {
+                $j = $i;
+            }
             return $j;
         },
     ],
@@ -335,11 +354,14 @@ benchmark_linq_groups("Counting values in arrays deep", 100, null,
             foreach ($DATA->orders as $order) {
                 $numberItems = 0;
                 foreach ($order['items'] as $item) {
-                    if ($item['quantity'] > 5)
+                    if ($item['quantity'] > 5) {
                         $numberItems++;
+                    }
+                    if ($numberItems > 2) {
+                        $numberOrders++;
+                        break;
+                    }
                 }
-                if ($numberItems > 2)
-                    $numberOrders++;
             }
             return $numberOrders;
         },
@@ -415,6 +437,12 @@ benchmark_linq_groups("Filtering values in arrays", 100, 'consume',
                     $filteredOrders[] = $order;
             }
             return $filteredOrders;
+        },
+        "yield" => function () use ($DATA) {
+            foreach ($DATA->orders as $order) {
+                if (count($order['items']) > 5)
+                    yield $order;
+            }
         },
         "array functions" => function () use ($DATA) {
             return array_filter(
@@ -828,6 +856,14 @@ benchmark_linq_groups("Aggregating arrays", 100, null,
             $avg = array_sum(array_map(function ($p) { return $p['quantity']; }, $DATA->products)) / count($DATA->products);
             $min = min(array_map(function ($p) { return $p['quantity']; }, $DATA->products));
             $max = max(array_map(function ($p) { return $p['quantity']; }, $DATA->products));
+            return "$sum-$avg-$min-$max";
+        },
+        "optimized" => function () use ($DATA) {
+            $qtys = array_map(function ($p) { return $p['quantity']; }, $DATA->products);
+            $sum = array_sum($qtys);
+            $avg = $sum / count($qtys);
+            $min = min($qtys);
+            $max = max($qtys);
             return "$sum-$avg-$min-$max";
         },
     ],
