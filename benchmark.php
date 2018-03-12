@@ -238,8 +238,11 @@ benchmark_linq_groups("Generating array of $ITER_MAX integers", 100, 'consume',
         },
     ],
     [
-        function () use ($ITER_MAX) {
+        'range' => function () use ($ITER_MAX) {
             return iterator_to_array(new S(new \ArrayIterator(range(0, $ITER_MAX - 1))));
+        },
+        'xrange' => function () use ($ITER_MAX) {
+            return iterator_to_array(new S(xrange(0, $ITER_MAX - 1)));
         },
     ]);
 
