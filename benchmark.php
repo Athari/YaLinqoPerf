@@ -16,14 +16,10 @@ function is_cli ()
 }
 
 function xrange($start, $limit, $step = 1) {
-    if ($start < $limit) {
-        for ($i = $start; $i <= $limit; $i += $step) {
-            yield $i;
-        }
-    } else {
-        for ($i = $start; $i >= $limit; $i += $step) {
-            yield $i;
-        }
+    assert($start < $limit);
+
+    for ($i = $start; $i <= $limit; $i += $step) {
+        yield $i;
     }
 }
 
@@ -57,6 +53,11 @@ function benchmark_operation ($count, $consume, $operation)
 
 function benchmark_array ($name, $count, $consume, $benches)
 {
+    if (isset($_SERVER['ONLY']) && strpos($name, $_SERVER['ONLY']) === false) {
+        // not testing because not requested
+        return;
+    }
+
     $benches = E::from($benches)->select('[ "name" => $k, "op" => $v ]')->toArray();
 
     // Run benchmarks
@@ -147,7 +148,10 @@ function consume ($array, $props = null)
 //------------------------------------------------------------------------------
 
 $ITER_MAX = isset($_SERVER['argv'][1]) ? (int)$_SERVER['argv'][1] : 100;
+
+echo "Preparing data with $ITER_MAX items...\t";
 $DATA = new SampleData($ITER_MAX);
+echo "Done\n";
 
 benchmark_linq_groups("Iterating over $ITER_MAX ints", 100, null,
     [
