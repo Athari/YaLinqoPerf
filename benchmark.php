@@ -7,6 +7,7 @@ use YaLinqo\Enumerable as E;
 use Ginq\Ginq as G;
 use Pinq\Traversable as P;
 use YaLinqo\Functions as F;
+use Pipeline\Simple as S;
 
 function is_cli ()
 {
@@ -94,14 +95,23 @@ function benchmark_array ($name, $count, $consume, $benches)
             . "\n";
 }
 
-function benchmark_linq_groups ($name, $count, $consume, $opsPhp, $opsYaLinqo, $opsGinq, $opsPinq)
+function benchmark_linq_groups ($name, $count, $consume, $opsPhp, $opsYaLinqo, $opsGinq, $opsPinq, $opsPipeline = null)
 {
-    $benches = E::from([
-        "PHP    " => $opsPhp,
-        "YaLinqo" => $opsYaLinqo,
-        "Ginq   " => $opsGinq,
-        "Pinq   " => $opsPinq,
-    ])->selectMany(
+    $benches = E::from(array_map(function ($callback) {
+        if (is_null($callback)) {
+            return [function () {
+                not_implemented();
+            }];
+        };
+
+        return $callback;
+    }, [
+        "PHP      " => $opsPhp,
+        "YaLinqo  " => $opsYaLinqo,
+        "Ginq     " => $opsGinq,
+        "Pinq     " => $opsPinq,
+        "Pipeline " => $opsPipeline,
+    ]))->selectMany(
         '$ops ==> $ops',
         '$op ==> $op',
         '($op, $name, $detail) ==> is_numeric($detail) ? $name : "$name [$detail]"'
@@ -165,6 +175,14 @@ benchmark_linq_groups("Iterating over $ITER_MAX ints", 100, null,
                 $j = $i;
             return $j;
         },
+    ],
+    [
+        function () use ($ITER_MAX) {
+            $j = null;
+            foreach (new S(new \ArrayIterator(range(0, $ITER_MAX - 1))) as $i)
+                $j = $i;
+            return $j;
+        },
     ]);
 
 benchmark_linq_groups("Generating array of $ITER_MAX integers", 100, 'consume',
@@ -194,6 +212,11 @@ benchmark_linq_groups("Generating array of $ITER_MAX integers", 100, 'consume',
     [
         function () use ($ITER_MAX) {
             return P::from(range(0, $ITER_MAX - 1))->asArray();
+        },
+    ],
+    [
+        function () use ($ITER_MAX) {
+            return iterator_to_array(new S(new \ArrayIterator(range(0, $ITER_MAX - 1))));
         },
     ]);
 
@@ -233,6 +256,24 @@ benchmark_linq_groups("Generating lookup of $ITER_MAX floats, calculate sum", 10
     [
         function () use ($ITER_MAX) {
             not_implemented();
+        },
+    ],
+    [
+        function () use ($ITER_MAX) {
+            $s = new S(new \ArrayIterator(range(0, $ITER_MAX - 1)));
+
+            $s->map(function ($i) {
+                return [
+                    (string)tan($i % 100),
+                    $i % 2 ? sin($i) : cos($i),
+                ];
+            });
+
+            $s->unpack(function ($tan, $sincos) {
+                return $sincos;
+            });
+
+            return $s->reduce();
         },
     ]);
 
@@ -276,6 +317,14 @@ benchmark_linq_groups("Counting values in arrays", 100, null,
             return P::from($DATA->orders)
                 ->where(function ($order) { return count($order['items']) > 5; })
                 ->count();
+        },
+    ],
+    [
+        function () use ($DATA) {
+            $s = new S(new \ArrayIterator($DATA->orders));
+            return $s->map(function ($order) {
+                return count($order['items']) > 5;
+            })->reduce();
         },
     ]);
 
@@ -337,6 +386,24 @@ benchmark_linq_groups("Counting values in arrays deep", 100, null,
                 })
                 ->count();
         },
+    ],
+    [
+        function () use ($DATA) {
+            $s = new S(new \ArrayIterator($DATA->orders));
+
+            $s->map(function ($order) {
+                $s = new S(new \ArrayIterator($order['items']));
+                return $s->map(function ($item) {
+                    return $item['quantity'] > 5;
+                })->reduce();
+            });
+
+            $s->map(function ($count) {
+                return $count > 2;
+            });
+
+            return $s->reduce();
+        },
     ]);
 
 benchmark_linq_groups("Filtering values in arrays", 100, 'consume',
@@ -376,6 +443,15 @@ benchmark_linq_groups("Filtering values in arrays", 100, 'consume',
         function () use ($DATA) {
             return P::from($DATA->orders)
                 ->where(function ($order) { return count($order['items']) > 5; });
+        },
+    ],
+    [
+        function () use ($DATA) {
+            $s = new S(new \ArrayIterator($DATA->orders));
+            $s->filter(function ($order) {
+                return count($order['items']) > 5;
+            });
+            return $s;
         },
     ]);
 
@@ -476,6 +552,33 @@ benchmark_linq_groups("Filtering values in arrays deep", 100,
                 ->where(function ($order) {
                     return count($order['items']) > 0;
                 });
+        },
+    ],
+    [
+        function () use ($DATA) {
+            $s = new S(new \ArrayIterator($DATA->orders));
+
+            $s->map(function ($order) {
+                $s = new S(new \ArrayIterator($order['items']));
+                $order['items'] = $s->filter(function ($item) {
+                    return $item['quantity'] > 5;
+                });
+
+                return $order;
+            });
+
+            $s->map(function ($order) {
+                return [
+                    'id' => $order['id'],
+                    'items' => iterator_to_array($order['items']),
+                ];
+            });
+
+            $s->filter(function ($order) {
+                return count($order['items']) > 0;
+            });
+
+            return $s;
         },
     ]);
 
@@ -677,6 +780,29 @@ benchmark_linq_groups("Joining arrays", 100, 'consume',
                     ];
                 });
         },
+    ],
+    [
+        function () use ($DATA) {
+            $s = new S(new \ArrayIterator($DATA->orders));
+            $ordersByCustomerId = $s->reduce(function ($ordersByCustomerId, $order) {
+                $ordersByCustomerId[$order['customerId']][] = &$order;
+            }, []);
+
+            $s = new S(new \ArrayIterator($DATA->users));
+            $s->map(function ($user) use ($ordersByCustomerId) {
+                if (isset($ordersByCustomerId[$user['id']])) {
+                    foreach ($ordersByCustomerId[$user['id']] as $order) {
+                        yield [
+                            'order' => &$order,
+                            'user' => $user,
+                        ];
+                    }
+                }
+            });
+
+            return $s;
+
+        },
     ]);
 
 benchmark_linq_groups("Aggregating arrays", 100, null,
@@ -745,6 +871,19 @@ benchmark_linq_groups("Aggregating arrays", 100, null,
             $max = P::from($DATA->products)->maximum(function ($p) { return $p['quantity']; });
             return "$sum-$avg-$min-$max";
         },
+    ],
+    [
+        function () use ($DATA) {
+            $qtys = iterator_to_array((new S(new \ArrayIterator($DATA->products)))->map(function ($p) {
+                return $p['quantity'];
+            }));
+
+            $sum = array_sum($qtys);
+            $avg = $sum / count($qtys);
+            $min = min($qtys);
+            $max = max($qtys);
+            return "$sum-$avg-$min-$max";
+        },
     ]);
 
 benchmark_linq_groups("Aggregating arrays custom", 100, null,
@@ -777,6 +916,14 @@ benchmark_linq_groups("Aggregating arrays custom", 100, null,
             return P::from($DATA->products)
                 ->select(function ($p) { return $p['quantity']; })
                 ->aggregate(function ($a, $q) { return $a * $q; });
+        },
+    ],
+    [
+        function () use ($DATA) {
+            $s = new S(new \ArrayIterator($DATA->products));
+            return $s->reduce(function ($carry, $p) {
+                return $carry * $p['quantity'];
+            }, 1);
         },
     ]);
 
